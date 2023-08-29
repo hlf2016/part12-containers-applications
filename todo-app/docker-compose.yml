@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  nginx:
+    image: nginx:1.20.1
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - 8082:80
+    depends_on:
+      # 等待前后端程序启动 否则可能启动过程中 因为DNS 解析失败 启动失败
+      - app
+      - server
+    container_name: reverse-proxy
+  app:
+    image: todo-front
+    build:
+      context: ./todo-frontend
+      dockerfile: Dockerfile
+    ports:
+      - 8083:80
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:8082/api/
+    container_name: todo-front
+  mongo:
+    image: mongo
+    ports:
+      - 3456:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_DATABASE: the_database
+    volumes:
+      - ./todo-backend/mongo/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js
+      - ./todo-backend/mongo_data:/data/db
+  redis:
+    image: redis
+    ports:
+      - 6388:6379
+    command: [ 'redis-server', '--appendonly', 'yes' ]
+    volumes:
+      - ./todo-backend/redis_data:/data
+  server:
+    image: todo-backend
+    build:
+      context: ./todo-backend
+      dockerfile: Dockerfile
+    ports:
+      - 3000:3000
+    volumes:
+      - ./todo-backend:/usr/src/app
+    depends_on:
+      - mongo
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://the_username:the_password@mongo:27017/the_database
